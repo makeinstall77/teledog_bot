@@ -2,8 +2,10 @@
 
 from pyowm import OWM
 from pyowm.utils.config import get_config_from
-from datetime import datetime
+from datetime import datetime, timedelta
 from matplotlib import dates
+from matplotlib.font_manager import FontProperties
+from configparser import ConfigParser
 import telebot
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,25 +14,42 @@ import re
 import logging
 import os
 import sys
-from configparser import ConfigParser
 
+#config init
 config = ConfigParser()
 config.read('config.ini')
+owm_id = config.get('id', 'owm')
+bot_id = config.get('id', 'bot')
+#logging_level = config.get('log', 'level')
 
-owm_id = config.get('id', 'owm') # -> "value1"
-bot_id = config.get('id', 'bot') # -> "value2"
-#print config.get('main', 'key3') # -> "value3"
-
+#config owm init
 config_dict = get_config_from('config_dict.json')
 
+#setup logging
 logging.basicConfig(filename=os.path.basename(sys.argv[0])+'.log', level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
+#init
 owm = OWM(owm_id, config_dict)
 bot = telebot.TeleBot(bot_id)
 mgr = owm.weather_manager()
+#prop = FontProperties(fname='/System/Library/Fonts/Apple Color Emoji.ttc')
+
+def emonize(x):
+    return {
+        'ясно': "☀",
+        'облачно с прояснениями': "🌤",
+        'небольшая облачность': "⛅",
+        'переменная облачность': "🌥",
+        'пасмурно': "☁",
+        'небольшой снег': "🌨",
+        'снег': "🌨",
+        'дождь': "🌧",
+        'небольшой дождь': "🌦",
+    }.get(x, "🐕")
 
 @bot.message_handler(content_types=['text'])
+
 
 def message_worker(message):
     t = message.text
@@ -53,25 +72,33 @@ def message_worker(message):
             temp_max = w.temperature('celsius')["temp_max"]
             temp = w.temperature('celsius')["temp"]
             wind_speed = w.wind()["speed"]
-
-            answer = "В городе " + place + " сейчас " + w.detailed_status + "\n"
+            hum = w.humidity
+            pres = w.pressure
+            answer = "В городе " + place + " сейчас " + w.detailed_status + " " + emonize(w.detailed_status) + "\n"
             answer += "Температура воздуха колеблется в районе " + str(temp) + "℃\n"
             answer += "Скорость ветра достигает " + str(wind_speed) + " м/с\n"
+            answer += "Влажность воздуха: " + str(hum) + "%\n"
+            answer += "Атмосферное давление: "+str(round(pres.get('press')/1.333223684))+" мм рт. ст."
 
             l = len(forecast)
 
-            x = []
-            y = []
-            y0 = [0]*l
-            ymax = [0]*l
-            ymin = [0]*l
-
+            fdate = [] #forecast date
+            ftemp = [] #forecast temperature
+            y0 = [0]*l #0-level
+            ymax = [0]*l #max level for graph
+            ymin = [0]*l #min level for graph
+            emo = []
+            emodate = []
+            #getting five days forecast
             for weather in forecast:
-                x.append(datetime.strptime(weather.reference_time('iso')[0:19], '%Y-%m-%d %H:%M:%S'))
-                y.append(weather.temperature('celsius')["temp"])
-
-            npmaxy = np.max(y)
-            npminy = np.min(y)
+                fdate.append(datetime.strptime(weather.reference_time('iso')[0:19], '%Y-%m-%d %H:%M:%S'))
+                ftemp.append(weather.temperature('celsius')["temp"])
+                print(str(weather.detailed_status))
+                emo.append(emonize(str(weather.detailed_status)))
+                emodate.append(datetime.strptime(weather.reference_time('iso')[0:19], '%Y-%m-%d %H:%M:%S')-timedelta(hours=2))
+            #max and min temperature range for coloring graph
+            npmaxy = np.max(ftemp)
+            npminy = np.min(ftemp)
 
             if (npmaxy<0):
                 ymax = [0 for i in ymax]
@@ -84,25 +111,32 @@ def message_worker(message):
                 ymin = [npminy for i in ymin]
 
 
-
-            plt.figure(figsize=(12, 12))
-
+            #plot init
+            plt.figure(figsize=(17, 17))
             fig, ax, = plt.subplots()
 
-            ax.plot(x, y, '-r', alpha = 0.7, label = 't℃', lw = 2, mec='b', mew=2, ms=10)
-            ax.plot(x, y0, color = 'black', lw = 0.1)
-            ax.plot(x, ymax, alpha = 0)
-            ax.plot(x, ymin, alpha = 0)
+            ax.plot(fdate, ftemp, '-r', alpha = 0.7, label = 't℃', lw = 2, mec='b', mew=2, ms=10) #forecast temperature curve
+            ax.plot(fdate, y0, color = 'black', lw = 0.1) #0-level
+            ax.plot(fdate, ymax, alpha = 0) #max level
+            ax.plot(fdate, ymin, alpha = 0) #min level
 
-            ax.fill_between(x, y0, ymin, color = '#539ecd', alpha = 0.2)
-            ax.fill_between(x, y0, ymax, color = 'orange', alpha = 0.2)
+            ax.fill_between(fdate, y0, ymin, color = '#539ecd', alpha = 0.2) #sub zero
+            ax.fill_between(fdate, y0, ymax, color = 'orange', alpha = 0.2) #warm zone
+
+            print(fdate)
+            print(emodate)
+
+            for x, val in zip(emodate, emo):
+                plt.text(x, npminy-2, val, {'family':'Noto Sans Symbols2'})
+
             fig.suptitle(place + ", прогноз на 5 дней", fontsize=12)
-            ax.tick_params(axis = 'x', which = 'major', labelsize = 8, labelrotation = 90)
-            ax.tick_params(axis = 'x', which = 'minor', labelsize = 6, labelrotation = 90)
+
+            #axis ticks and labels
+            ax.tick_params(axis = 'x', which = 'major', labelsize = 8, labelrotation = 90) #date on x
+            ax.tick_params(axis = 'x', which = 'minor', labelsize = 6, labelrotation = 90) #time on x
             ax.minorticks_on()
             ax.grid(which='minor', color = 'gray', linestyle = ':',alpha=0.2)
             ax.tick_params(axis = 'x', which = 'minor', labelsize = 6, labelrotation = 90)
-
             majorfmt = dates.DateFormatter('%m %d')
             minorfmt = dates.DateFormatter('%H:%M')
             ax.xaxis.set_major_formatter(majorfmt)
