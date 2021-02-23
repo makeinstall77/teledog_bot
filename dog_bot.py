@@ -141,7 +141,7 @@ def message_worker(message):
             ax2.plot(fdate, fhum, '-b', alpha = 0.7, label="Влажность", lw = 1, mec='b', mew=2, ms=10) 
             ax2.yaxis.set_label_position('right') 
             ax4.yaxis.set_label_position('right')
-            ax3.yaxis.set_label_position('left')
+            ax3.yaxis.set_label_position('right')
             ax4.plot(fdate, fpres, '-k', alpha = 0.5, label="Давление", lw = 0.5)
             ax3.bar(fdate, snow, color = 'blue', alpha = 0.3, width = 0.12, label = 'Снег', align='edge')
 
@@ -149,8 +149,9 @@ def message_worker(message):
             pp = 1
             xx = 1
             flag = 1
+            bottom, top = ax.get_ylim()
             for x, val, s, x1, p in zip(emodate, emo, snow, fdate, fpres):
-                ax.text(x, npminy-2.2, val, {'family':'Noto Sans Symbols2', 'size':10})
+                ax.text(x, bottom-2.2, val, {'family':'Noto Sans Symbols2', 'size':10})
                 if (p > pp):
                     if (flag != 1):
                         ax4.text(xx, pp, pp, alpha = 0.4, fontsize = 6)
@@ -200,6 +201,7 @@ def message_worker(message):
             plt.grid(True)
             plt.autoscale(tight=True)
             plt.subplots_adjust(bottom = 0.2, top = 0.92, left = 0.08, right = 0.95)
+            fig.canvas.draw()
             fig.tight_layout()
 
             fig.savefig('fig.png', bbox_inches='tight')
