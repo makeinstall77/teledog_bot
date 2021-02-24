@@ -49,6 +49,9 @@ bot = telebot.TeleBot(bot_id)
 mgr = owm.weather_manager()
 #prop = FontProperties(fname='/System/Library/Fonts/Apple Color Emoji.ttc')
 
+def extract_arg(arg):
+    return arg.split(maxsplit=1)[1:]
+
 def emonize(x):
     return {
         'ясно': "☀",
@@ -91,12 +94,12 @@ def send_welcome(message):
 #@bot.message_handler(content_types=['text'])
 @bot.message_handler(commands=['weather'])
 def message_worker(message):
-    t = message.text[8:]
+    t = extract_arg(message.text)
     place = ""
-    if (t == ""):
+    if not t:
         place = "Владивосток"
     else:
-        place = t[1:].title()
+        place = t[0].title()
     if (place):
         logging.warning(place)
         try:
