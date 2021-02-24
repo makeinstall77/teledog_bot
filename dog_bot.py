@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from matplotlib import dates
 from matplotlib.font_manager import FontProperties
 from configparser import ConfigParser
-#from pandas import DataFrame
 import mpl_toolkits.axisartist as AA
 import telebot
 import numpy as np
@@ -18,11 +17,23 @@ import logging
 import os
 import sys
 
+
 #config init
+
+cam = []
+
 config = ConfigParser()
 config.read('config.ini')
 owm_id = config.get('id', 'owm')
 bot_id = config.get('id', 'bot')
+
+for i in range (4):
+    camset = {'login':config.get('cam'+str(i), 'login'), 'password':config.get('cam'+str(i), 'password'), 'ip':config.get('cam'+str(i), 'ip'), 'name':config.get('cam'+str(i), 'name')}
+    cam.append(camset)
+
+#print('http://'+cam[1]['login']+':'+cam[1]['password']+'@'+cam[1]['ip']+'/ISAPI/Streaming/channels/101/picture/')
+
+
 #logging_level = config.get('log', 'level')
 
 #config owm init
@@ -51,19 +62,41 @@ def emonize(x):
         'небольшой дождь': "🌦",
     }.get(x, "🐕")
 
-@bot.message_handler(content_types=['text'])
+def send_camera_image(cam_index, message):
+    logging.warning('cam'+str(cam_index))
+    link = 'http://'+cam[cam_index]['login']+':'+cam[cam_index]['password']+'@'+cam[cam_index]['ip']+'/ISAPI/Streaming/channels/101/picture/'
+    imageFile = '/tmp/photo.jpg'
+    os.system('wget '+link+' -O '+imageFile)
+    img = open(imageFile, 'rb')
+    bot.send_photo(message.chat.id, img, caption=cam[cam_index]['name'])
 
 
+@bot.message_handler(commands=['cam_room'])
+def send_welcome(message):
+    send_camera_image(1, message)
+
+@bot.message_handler(commands=['cam_box'])
+def send_welcome(message):
+    send_camera_image(3, message)
+
+@bot.message_handler(commands=['cam_gate'])
+def send_welcome(message):
+    send_camera_image(2, message)
+
+@bot.message_handler(commands=['cam_parking'])
+def send_welcome(message):
+    send_camera_image(0, message)
+
+
+#@bot.message_handler(content_types=['text'])
+@bot.message_handler(commands=['weather'])
 def message_worker(message):
-    t = message.text
+    t = message.text[8:]
     place = ""
-    if (t.lower() == "погода"):
+    if (t == ""):
         place = "Владивосток"
     else:
-        if (t.lower().count('погода')):
-            t = t.lower().replace('погода', '')
-            t = (re.sub(r'\b\w{1,2}\b', '', t))
-            place = t.replace(' ', '').title()
+        place = t[1:].title()
     if (place):
         logging.warning(place)
         try:
@@ -145,13 +178,13 @@ def message_worker(message):
             ax4.plot(fdate, fpres, '-k', alpha = 0.5, label="Давление", lw = 0.5)
             ax3.bar(fdate, snow, color = 'blue', alpha = 0.3, width = 0.12, label = 'Снег', align='edge')
 
-            #emoji bar
+            #emoji, snow bar
             pp = 1
             xx = 1
             flag = 1
             bottom, top = ax.get_ylim()
             for x, val, s, x1, p in zip(emodate, emo, snow, fdate, fpres):
-                ax.text(x, bottom-2.2, val, {'family':'Noto Sans Symbols2', 'size':10})
+                ax.text(x, bottom, val, {'family':'Noto Sans Symbols2', 'size':10}) #emoji
                 if (p > pp):
                     if (flag != 1):
                         ax4.text(xx, pp, pp, alpha = 0.4, fontsize = 6)
@@ -172,8 +205,8 @@ def message_worker(message):
             ax.tick_params(axis = 'y', colors = 'red')
             ax2.tick_params(axis = 'y', colors = 'blue')
 
-            ax.tick_params(axis = 'x', which = 'major', labelsize = 7, labelrotation = 90) #date on x
-            ax.tick_params(axis = 'x', which = 'minor', labelsize = 5, labelrotation = 90) #time on x
+            ax.tick_params(axis = 'x', which = 'major', labelsize = 7, labelrotation = 90, pad = 15) #date on x
+            ax.tick_params(axis = 'x', which = 'minor', labelsize = 5, labelrotation = 90, pad = 15) #time on x
             ax.minorticks_on()
             ax2.minorticks_on()
 
@@ -215,5 +248,8 @@ def message_worker(message):
             logging.error(exc_type, fname, exc_tb.tb_lineno)
             pass
         #answer = "Неправильный город"
+
+#'http://'+cam[1]['login']+':'+cam[1]['password']+'@'+cam[1]['ip']+'/ISAPI/Streaming/channels/101/picture/'
+
 
 bot.polling(none_stop = True)
