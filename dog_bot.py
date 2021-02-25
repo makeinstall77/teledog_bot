@@ -20,19 +20,16 @@ import sys
 
 #config init
 
-cam = []
 
 config = ConfigParser()
 config.read('config.ini')
 owm_id = config.get('id', 'owm')
 bot_id = config.get('id', 'bot')
 
+cam = []
 for i in range (4):
     camset = {'login':config.get('cam'+str(i), 'login'), 'password':config.get('cam'+str(i), 'password'), 'ip':config.get('cam'+str(i), 'ip'), 'name':config.get('cam'+str(i), 'name')}
     cam.append(camset)
-
-#print('http://'+cam[1]['login']+':'+cam[1]['password']+'@'+cam[1]['ip']+'/ISAPI/Streaming/channels/101/picture/')
-
 
 #logging_level = config.get('log', 'level')
 
@@ -47,8 +44,8 @@ logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 owm = OWM(owm_id, config_dict)
 bot = telebot.TeleBot(bot_id)
 mgr = owm.weather_manager()
-#prop = FontProperties(fname='/System/Library/Fonts/Apple Color Emoji.ttc')
 
+#извлечение аргументов из комманды от бота
 def extract_arg(arg):
     return arg.split(maxsplit=1)[1:]
 
@@ -68,30 +65,29 @@ def emonize(x):
 def send_camera_image(cam_index, message):
     logging.warning('cam'+str(cam_index))
     link = 'http://'+cam[cam_index]['login']+':'+cam[cam_index]['password']+'@'+cam[cam_index]['ip']+'/ISAPI/Streaming/channels/101/picture/'
-    imageFile = '/tmp/photo.jpg'
+    imageFile = './img/photo_'+'cam'+str(cam_index)+"_"+str(datetime.timestamp(datetime.now()))+'.jpg'
     os.system('wget '+link+' -O '+imageFile)
     img = open(imageFile, 'rb')
     bot.send_photo(message.chat.id, img, caption=cam[cam_index]['name'])
 
-
 @bot.message_handler(commands=['cam_room'])
-def send_welcome(message):
+def send_cam1_img(message):
     send_camera_image(1, message)
 
 @bot.message_handler(commands=['cam_box'])
-def send_welcome(message):
+def send_cam3_img(message):
     send_camera_image(3, message)
 
 @bot.message_handler(commands=['cam_gate'])
-def send_welcome(message):
+def send_cam2_img(message):
     send_camera_image(2, message)
 
 @bot.message_handler(commands=['cam_parking'])
-def send_welcome(message):
+def send_cam0_img(message):
     send_camera_image(0, message)
 
-
 #@bot.message_handler(content_types=['text'])
+
 @bot.message_handler(commands=['weather'])
 def message_worker(message):
     t = extract_arg(message.text)
@@ -103,16 +99,15 @@ def message_worker(message):
     if (place):
         logging.warning(place)
         try:
-            observation = mgr.weather_at_place(place)
-            w = observation.weather
-            forecaster = mgr.forecast_at_place(place, '3h')
-            forecast = forecaster.forecast
+            w =  mgr.weather_at_place(place).weather
+            forecast = mgr.forecast_at_place(place, '3h').forecast
             temp_min = w.temperature('celsius')["temp_min"]
             temp_max = w.temperature('celsius')["temp_max"]
             temp = w.temperature('celsius')["temp"]
             wind_speed = w.wind()["speed"]
             hum = w.humidity
             pres = w.pressure
+            
             answer = "В городе " + place + " сейчас " + w.detailed_status + " " + emonize(w.detailed_status) + "\n"
             answer += "Температура воздуха колеблется в районе " + str(temp) + "℃\n"
             answer += "Скорость ветра достигает " + str(wind_speed) + " м/с\n"
@@ -131,6 +126,7 @@ def message_worker(message):
             emo = []
             emodate = []
             snow = []
+            rain = []
 
             #getting five days forecast
             for weather in forecast:
@@ -140,11 +136,16 @@ def message_worker(message):
                 emo.append(emonize(str(weather.detailed_status)))
                 emodate.append(datetime.strptime(weather.reference_time('iso')[0:19], '%Y-%m-%d %H:%M:%S')-timedelta(hours=2))
                 fhum.append(weather.humidity)
+                
                 if (weather.snow.get('3h') == None):
                     snow.append(0)
                 else:
                     snow.append(weather.snow.get('3h'))
-
+                    
+                if (weather.rain.get('3h') == None):
+                    rain.append(0)
+                else:
+                    rain.append(weather.rain.get('3h'))
 
             #max and min temperature range for coloring graph
             npmaxy = np.max(ftemp)
@@ -159,12 +160,12 @@ def message_worker(message):
             else:
                 ymin = [npminy for i in ymin]
 
-
             #plot init
             plt.figure(figsize=(15, 10))
             fig, ax = plt.subplots(nrows=1, ncols=1)
             ax2 = ax.twinx()
             ax3 = ax.twinx()
+            ax5 = ax.twinx()
             ax4 = ax.twinx()
 
             ax.plot(fdate, ymax, alpha = 0) #max level
@@ -180,13 +181,14 @@ def message_worker(message):
             ax3.yaxis.set_label_position('right')
             ax4.plot(fdate, fpres, '-k', alpha = 0.5, label="Давление", lw = 0.5)
             ax3.bar(fdate, snow, color = 'blue', alpha = 0.3, width = 0.12, label = 'Снег', align='edge')
+            ax5.bar(fdate, rain, color = 'blue', alpha = 0.3, width = 0.12, label = 'Дождь', align='edge')
 
-            #emoji, snow bar
+            #emoji, snow, rain bar
             pp = 1
             xx = 1
             flag = 1
             bottom, top = ax.get_ylim()
-            for x, val, s, x1, p in zip(emodate, emo, snow, fdate, fpres):
+            for x, val, s, x1, p, r in zip(emodate, emo, snow, fdate, fpres, rain):
                 ax.text(x, bottom, val, {'family':'Noto Sans Symbols2', 'size':10}) #emoji
                 if (p > pp):
                     if (flag != 1):
@@ -199,10 +201,14 @@ def message_worker(message):
                         flag = -1
                 pp = p
                 xx = x
+                
                 if (s > 0.1):
                     ax3.text(x1, s/2, str(round(s*100)), {'size':6})
+                    
+                if (r > 0.1):
+                    ax5.text(x1, r/2, str(round(r*100)), {'size':6})
+                    
             fig.suptitle(place + ", прогноз на 5 дней", fontsize=12)
-
 
             #axis ticks and labels
             ax.tick_params(axis = 'y', colors = 'red')
@@ -221,13 +227,14 @@ def message_worker(message):
             ax.xaxis.set_minor_formatter(minorfmt)
             ax.xaxis.set_major_locator(dates.DayLocator())
             ax.xaxis.set_minor_locator(dates.HourLocator(interval=3))
-#            ax3.axis('off') 
+
             ax3.get_xaxis().set_visible(False)
             ax3.get_yaxis().set_visible(False)
+            ax5.get_xaxis().set_visible(False)
+            ax5.get_yaxis().set_visible(False)
             ax4.get_yaxis().set_visible(False)
             ax.margins(0, 0)
             ax2.margins(0, 0)
-#            ax3.margins(-0.4, -0.4)
             ax4.margins(0, 0)
 
             ax.legend()
@@ -240,9 +247,11 @@ def message_worker(message):
             fig.canvas.draw()
             fig.tight_layout()
 
-            fig.savefig('fig.png', bbox_inches='tight')
+            imageFile = './img/forecast_'+place+"_"+str(datetime.timestamp(datetime.now()))+'.png'
 
-            img = open('fig.png', 'rb')
+            fig.savefig(imageFile, bbox_inches='tight')
+
+            img = open(imageFile, 'rb')
 
             bot.send_photo(message.chat.id, img, caption = answer)
         except Exception as e:
