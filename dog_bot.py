@@ -43,9 +43,12 @@ logging.basicConfig(filename=os.path.basename(sys.argv[0])+'.log', level=logging
 logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
 #init
-owm = OWM(owm_id, config_dict)
-bot = telebot.TeleBot(bot_id)
-mgr = owm.weather_manager()
+try:
+    owm = OWM(owm_id, config_dict)
+    bot = telebot.TeleBot(bot_id)
+    mgr = owm.weather_manager()
+except:
+    pass
 
 #извлечение аргументов из комманды от бота
 def extract_arg(arg):
@@ -68,32 +71,41 @@ def emonize(x):
     }.get(x, "🐕")
 
 def send_camera_image(cam_index, message):
-    msg = cam[cam_index]['name']
-    logging.warning('cam'+str(cam_index))
-    link = 'http://'+cam[cam_index]['login']+':'+cam[cam_index]['password']+'@'+cam[cam_index]['ip']+'/ISAPI/Streaming/channels/101/picture/'
-    imageFile = './img/photo_'+'cam'+str(cam_index)+"_"+str(datetime.timestamp(datetime.now()))+'.jpg'
-    os.system('wget '+link+' -O '+imageFile)
-    img = open(imageFile, 'rb')
-    
-    # image = face_recognition.load_image_file(imageFile)
-    # face_locations = face_recognition.face_locations(image)
-    # face_landmarks_list = face_recognition.face_landmarks(image)
-    
-    # if (len(face_locations) > 0):
-        # msg += ". Найдены лица на фото в количестве: " + str(len(face_locations))
+    try:
+        msg = cam[cam_index]['name']
+        logging.warning('cam'+str(cam_index))
+        link = 'http://'+cam[cam_index]['login']+':'+cam[cam_index]['password']+'@'+cam[cam_index]['ip']+'/ISAPI/Streaming/channels/101/picture/'
+        imageFile = './img/photo_'+'cam'+str(cam_index)+"_"+str(datetime.timestamp(datetime.now()))+'.jpg'
+        os.system('wget '+link+' -O '+imageFile)
+        img = open(imageFile, 'rb')
         
-        # logging.warning(len(face_locations))
-        # pil_image = Image.fromarray(image)
-        # draw = ImageDraw.Draw(pil_image)
+        # image = face_recognition.load_image_file(imageFile)
+        # face_locations = face_recognition.face_locations(image)
+        # face_landmarks_list = face_recognition.face_landmarks(image)
+        
+        # if (len(face_locations) > 0):
+            # msg += ". Найдены лица на фото в количестве: " + str(len(face_locations))
             
-        # for face_location in face_locations:
-            # top, right, bottom, left = face_location
-            # draw.rectangle(((left, top), (right, bottom)), outline=(0, 0, 255))
-            
-        # pil_image.save(imageFile)
-        # img = open(imageFile, 'rb')
+            # logging.warning(len(face_locations))
+            # pil_image = Image.fromarray(image)
+            # draw = ImageDraw.Draw(pil_image)
+                
+            # for face_location in face_locations:
+                # top, right, bottom, left = face_location
+                # draw.rectangle(((left, top), (right, bottom)), outline=(0, 0, 255))
+                
+            # pil_image.save(imageFile)
+            # img = open(imageFile, 'rb')
     
-    bot.send_photo(message.chat.id, img, caption=msg)
+        bot.send_photo(message.chat.id, img, caption=msg)
+    except Exception as e:
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        logging.error(exc_type, fname, exc_tb.tb_lineno)
+        try:
+            bot.reply_to(message, e)
+        except:
+            pass
 
 # @bot.message_handler(content_types=['photo'])
 # def handle_docs_photo(message):
@@ -320,7 +332,12 @@ def message_worker(message):
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         logging.error(exc_type, fname, exc_tb.tb_lineno)
-        bot.reply_to(message, e)
+        try:
+            bot.reply_to(message, e)
+        except:
+            pass
         pass
-
-bot.polling(none_stop = True)
+try:
+	bot.polling(none_stop = True)
+except:
+	pass
