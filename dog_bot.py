@@ -18,6 +18,7 @@ import re
 import logging
 import os
 import sys
+import time
 
 
 #config init
@@ -27,9 +28,12 @@ config = ConfigParser()
 config.read('config.ini')
 owm_id = config.get('id', 'owm')
 bot_id = config.get('id', 'bot')
+crn9cams = config.get('crn9', 'ip')
+crn9login = config.get('crn9', 'login')
+crn9password = config.get('crn9', 'password')
 
 cam = []
-for i in range (4):
+for i in range (5):
     camset = {'login':config.get('cam'+str(i), 'login'), 'password':config.get('cam'+str(i), 'password'), 'ip':config.get('cam'+str(i), 'ip'), 'name':config.get('cam'+str(i), 'name')}
     cam.append(camset)
 
@@ -75,28 +79,9 @@ def send_camera_image(cam_index, message):
         msg = cam[cam_index]['name']
         logging.warning('cam'+str(cam_index))
         link = 'http://'+cam[cam_index]['login']+':'+cam[cam_index]['password']+'@'+cam[cam_index]['ip']+'/ISAPI/Streaming/channels/101/picture/'
-        imageFile = './img/photo_'+'cam'+str(cam_index)+"_"+str(datetime.timestamp(datetime.now()))+'.jpg'
+        imageFile = './img/'+'cam'+str(cam_index)+"/"+str(datetime.timestamp(datetime.now()))+'.jpg'
         os.system('wget '+link+' -O '+imageFile)
         img = open(imageFile, 'rb')
-        
-        # image = face_recognition.load_image_file(imageFile)
-        # face_locations = face_recognition.face_locations(image)
-        # face_landmarks_list = face_recognition.face_landmarks(image)
-        
-        # if (len(face_locations) > 0):
-            # msg += ". Найдены лица на фото в количестве: " + str(len(face_locations))
-            
-            # logging.warning(len(face_locations))
-            # pil_image = Image.fromarray(image)
-            # draw = ImageDraw.Draw(pil_image)
-                
-            # for face_location in face_locations:
-                # top, right, bottom, left = face_location
-                # draw.rectangle(((left, top), (right, bottom)), outline=(0, 0, 255))
-                
-            # pil_image.save(imageFile)
-            # img = open(imageFile, 'rb')
-    
         bot.send_photo(message.chat.id, img, caption=msg)
     except Exception as e:
         exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -106,41 +91,6 @@ def send_camera_image(cam_index, message):
             bot.reply_to(message, e)
         except:
             pass
-
-# @bot.message_handler(content_types=['photo'])
-# def handle_docs_photo(message):
-    # try:
-        # file_info = bot.get_file(message.photo[len(message.photo)-1].file_id)
-        # downloaded_file = bot.download_file(file_info.file_path)
-
-        # src='./downloads/'+file_info.file_path;
-        # with open(src, 'wb') as new_file:
-           # new_file.write(downloaded_file)
-        # bot.reply_to(message, "Ищу лица на фото...") 
-        
-        # image = face_recognition.load_image_file(src)
-        # face_locations = face_recognition.face_locations(image)
-        # msg = ""
-        
-        # if (len(face_locations) > 0):
-            # msg += "Найдены лица на фото в количестве: " + str(len(face_locations))
-            # logging.warning(len(face_locations))
-            # pil_image = Image.fromarray(image)
-            # draw = ImageDraw.Draw(pil_image)
-            
-            # for face_location in face_locations:
-                # top, right, bottom, left = face_location
-                # draw.rectangle(((left, top), (right, bottom)), outline=(0, 0, 255))
-                
-            # pil_image.save(src)
-            # img = open(src, 'rb')
-        
-            # bot.send_photo(message.chat.id, img, caption=msg)
-        # else:
-            # bot.reply_to(message, "Лиц не обнаружено") 
-
-    # except Exception as e:
-        # bot.reply_to(message, e)
 
 @bot.message_handler(commands=['cam_room'])
 def send_cam1_img(message):
@@ -158,6 +108,27 @@ def send_cam2_img(message):
 def send_cam0_img(message):
     send_camera_image(0, message)
 
+@bot.message_handler(commands=['cam_gateways'])
+def send_cam1_img(message):
+    send_camera_image(4, message)
+
+@bot.message_handler(commands=['crn9'])
+def send_crn9_img(message):
+    files = []
+    for ip in crn9cams.split(): 
+        link = 'http://'+crn9login+':'+crn9password+'@'+ip+'/ISAPI/Streaming/channels/101/picture/'
+        imageFile = 'img/crn9/' + ip + "_" + str(datetime.timestamp(datetime.now())) + '.jpg'
+        os.system('wget '+link+' -O '+imageFile)
+        if os.path.getsize(imageFile) > 0:
+                files.append(imageFile)
+    if len(files) > 10:
+            count = len(files) // 10
+            for x in range(count + 1):
+                bot.send_media_group(message.chat.id, [telebot.types.InputMediaPhoto(open(doc, 'rb')) for doc in files[x*10:x*10+10]])
+                time.sleep(60)
+    else:
+        bot.send_media_group(message.chat.id, [telebot.types.InputMediaPhoto(open(doc, 'rb')) for doc in files])
+    
 
 #@bot.message_handler(commands=['weather'])
 @bot.message_handler(content_types=['text'])
@@ -321,7 +292,7 @@ def message_worker(message):
                 fig.canvas.draw()
                 fig.tight_layout()
 
-                imageFile = './img/forecast_'+place+"_"+str(datetime.timestamp(datetime.now()))+'.png'
+                imageFile = './img/forecast/'+place+"_"+str(datetime.timestamp(datetime.now()))+'.png'
 
                 fig.savefig(imageFile, bbox_inches='tight')
 
@@ -337,7 +308,12 @@ def message_worker(message):
         except:
             pass
         pass
-try:
-	bot.polling(none_stop = True)
-except:
-	pass
+        
+while True:
+    try:
+        bot.polling(none_stop = True)
+    except Exception as e:
+        time.sleep(5)
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        logging.error(exc_type, fname, exc_tb.tb_lineno)
